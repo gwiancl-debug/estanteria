@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Estantería</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header>
+        <h1>mi estantería ✦</h1>
+        <p class="subtitulo">películas, series & libros</p>
+    </header>
+
+    <section class="formulario-section">
+        <h2>agregar algo nuevo</h2>
+        <form action="/agregar" method="POST" class="formulario">
+            <input type="text" name="titulo" placeholder="título" required>
+            <select name="tipo">
+                <option value="pelicula">🎬 película</option>
+                <option value="serie">📺 serie</option>
+                <option value="libro">📖 libro</option>
+            </select>
+            <input type="text" name="portada" placeholder="url de la portada (opcional)">
+            <input type="number" name="rating" placeholder="rating (1-5)" min="1" max="5" required>
+            <textarea name="nota" placeholder="tu nota personal..."></textarea>
+            <button type="submit">agregar a la estantería</button>
+        </form>
+    </section>
+
+    <section class="estanteria">
+        {% for item in items %}
+        <div class="libro {{ item[2] }}" 
+             onclick="abrirModal(this)" 
+             data-id="{{ item[0] }}"
+             data-titulo="{{ item[1] }}" 
+             data-tipo="{{ item[2] }}" 
+             data-rating="{{ item[3] }}" 
+             data-nota="{{ item[4] }}" 
+             data-portada="{{ item[5] }}">
+            {% if item[5] %}
+                <img src="{{ item[5] }}" alt="{{ item[1] }}">
+            {% else %}
+                <div class="sin-portada">{{ item[1] }}</div>
+            {% endif %}
+            <div class="info">
+                <p class="titulo-libro">{{ item[1] }}</p>
+                <p class="rating">{{ '★' * item[3] }}{{ '☆' * (5 - item[3]) }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <div class="estante-linea"></div>
+
+    <div class="modal-overlay" id="modalOverlay" onclick="cerrarModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <button class="cerrar" onclick="cerrarModal()">✕</button>
+
+            <div class="menu-tres-puntos">
+                <button class="tres-puntos-btn" onclick="toggleMenu(event)">···</button>
+                <div class="dropdown-menu" id="dropdownMenu">
+                    <button onclick="activarEdicion()">editar</button>
+                    <button onclick="compartirItem()">compartir</button>
+                    <button class="eliminar-btn" onclick="eliminarItem()">eliminar</button>
+                </div>
+            </div>
+
+            <div class="modal-contenido">
+                <div class="modal-izquierda">
+                    <img id="modalPortada" src="" alt="">
+                    <div id="modalSinPortada" class="modal-sin-portada" style="display:none"></div>
+                </div>
+                <div class="modal-derecha">
+                    <p class="modal-tipo" id="modalTipo"></p>
+                    <h2 class="modal-titulo" id="modalTitulo"></h2>
+                    <p class="modal-rating" id="modalRating"></p>
+                    <p class="modal-nota" id="modalNota"></p>
+
+                    <div id="edicionForm" style="display:none">
+                        <input type="text" id="editPortada" placeholder="url de la portada">
+                        <input type="number" id="editRating" placeholder="rating (1-5)" min="1" max="5">
+                        <textarea id="editNota" placeholder="tu nota personal..."></textarea>
+                        <div class="botones-edicion">
+                            <button onclick="guardarEdicion()">guardar</button>
+                            <button class="cancelar" onclick="cancelarEdicion()">cancelar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="config-btn" onclick="toggleConfig(event)">⚙️</button>
+
+    <div class="config-panel" id="configPanel" onclick="event.stopPropagation()">
+        <h3>personalizar</h3>
+        
+        <p class="config-label">paletas</p>
+        <div class="paletas">
+            <div class="paleta-opcion" onclick="aplicarPaleta('rosemilk')">
+                <div class="paleta-circulo" style="background:#d4a5a0"></div>
+                <span>rose milk</span>
+            </div>
+            <div class="paleta-opcion" onclick="aplicarPaleta('latte')">
+                <div class="paleta-circulo" style="background:#c9a882"></div>
+                <span>latte</span>
+            </div>
+            <div class="paleta-opcion" onclick="aplicarPaleta('morningfog')">
+                <div class="paleta-circulo" style="background:#8a9ba8"></div>
+                <span>morning fog</span>
+            </div>
+            <div class="paleta-opcion" onclick="aplicarPaleta('herbgarden')">
+                <div class="paleta-circulo" style="background:#87a878"></div>
+                <span>herb garden</span>
+            </div>
+            <div class="paleta-opcion" onclick="aplicarPaleta('midnight')">
+                <div class="paleta-circulo" style="background:#1c1c1c"></div>
+                <span>midnight</span>
+            </div>
+        </div>
+
+        <p class="config-label">personalizado</p>
+        <div class="config-custom">
+            <label>fondo
+                <input type="color" id="colorFondo" onchange="aplicarCustom()">
+            </label>
+            <label>acento
+                <input type="color" id="colorAccento" onchange="aplicarCustom()">
+            </label>
+            <label>texto
+                <input type="color" id="colorTexto" onchange="aplicarCustom()">
+            </label>
+            <label>tarjetas
+                <input type="color" id="colorTarjeta" onchange="aplicarCustom()">
+            </label>
+        </div>
+    </div>
+
+    <script>
+        let itemIdActual = null;
+        let tituloActual = null;
+
+        const paletas = {
+            rosemilk: {
+                fondo: '#f5f0eb',
+                acento: '#d4a5a0',
+                texto: '#4a3f35',
+                tarjeta: '#fdf8f5',
+                subtitulo: '#b89f94',
+                titulo: '#7d5c4d'
+            },
+            latte: {
+                fondo: '#f2ebe0',
+                acento: '#c9a882',
+                texto: '#3d2f22',
+                tarjeta: '#faf5ed',
+                subtitulo: '#b09878',
+                titulo: '#8a6a4a'
+            },
+            morningfog: {
+                fondo: '#eef1f4',
+                acento: '#7a9bb5',
+                texto: '#2d3a45',
+                tarjeta: '#f8fafc',
+                subtitulo: '#8a9dae',
+                titulo: '#4a6070'
+            },
+            herbgarden: {
+                fondo: '#f0f4ee',
+                acento: '#7a9e6e',
+                texto: '#2d3d28',
+                tarjeta: '#f8fbf6',
+                subtitulo: '#8aaa80',
+                titulo: '#4a6e40'
+            },
+            midnight: {
+                fondo: '#1c1c1c',
+                acento: '#c9b99a',
+                texto: '#e8e0d8',
+                tarjeta: '#2e2e2e',
+                subtitulo: '#9a8e7a',
+                titulo: '#d4c4aa'
+            }
+        };
+
+        function aplicarPaleta(nombre) {
+            const p = paletas[nombre];
+            aplicarColores(p.fondo, p.acento, p.texto, p.tarjeta, p.subtitulo, p.titulo);
+            document.getElementById('colorFondo').value = p.fondo;
+            document.getElementById('colorAccento').value = p.acento;
+            document.getElementById('colorTexto').value = p.texto;
+            document.getElementById('colorTarjeta').value = p.tarjeta;
+            localStorage.setItem('paleta', JSON.stringify(p));
+        }
+
+        function aplicarCustom() {
+            const fondo = document.getElementById('colorFondo').value;
+            const acento = document.getElementById('colorAccento').value;
+            const texto = document.getElementById('colorTexto').value;
+            const tarjeta = document.getElementById('colorTarjeta').value;
+            aplicarColores(fondo, acento, texto, tarjeta, acento, acento);
+            localStorage.setItem('paleta', JSON.stringify({ fondo, acento, texto, tarjeta, subtitulo: acento, titulo: acento }));
+        }
+
+        function aplicarColores(fondo, acento, texto, tarjeta, subtitulo, titulo) {
+            document.documentElement.style.setProperty('--fondo', fondo);
+            document.documentElement.style.setProperty('--acento', acento);
+            document.documentElement.style.setProperty('--texto', texto);
+            document.documentElement.style.setProperty('--tarjeta', tarjeta);
+            document.documentElement.style.setProperty('--subtitulo', subtitulo);
+            document.documentElement.style.setProperty('--titulo', titulo);
+        }
+
+        function toggleConfig(e) {
+            e.stopPropagation();
+            document.getElementById('configPanel').classList.toggle('visible');
+        }
+
+        document.addEventListener('click', function() {
+            document.getElementById('configPanel').classList.remove('visible');
+            document.getElementById('dropdownMenu').classList.remove('visible');
+        });
+
+        window.addEventListener('load', function() {
+            const guardada = localStorage.getItem('paleta');
+            if (guardada) {
+                const p = JSON.parse(guardada);
+                aplicarColores(p.fondo, p.acento, p.texto, p.tarjeta, p.subtitulo, p.titulo);
+                document.getElementById('colorFondo').value = p.fondo;
+                document.getElementById('colorAccento').value = p.acento;
+                document.getElementById('colorTexto').value = p.texto;
+                document.getElementById('colorTarjeta').value = p.tarjeta;
+            }
+
+            const hash = window.location.hash;
+            if (hash.startsWith('#item-')) {
+                const id = hash.replace('#item-', '');
+                const el = document.querySelector('[data-id="' + id + '"]');
+                if (el) abrirModal(el);
+            }
+        });
+
+        function abrirModal(el) {
+            itemIdActual = el.dataset.id;
+            tituloActual = el.dataset.titulo;
+            const titulo = el.dataset.titulo;
+            const tipo = el.dataset.tipo;
+            const rating = parseInt(el.dataset.rating);
+            const nota = el.dataset.nota;
+            const portada = el.dataset.portada;
+
+            document.getElementById('modalTitulo').textContent = titulo;
+            const tipos = { pelicula: '🎬 película', serie: '📺 serie', libro: '📖 libro' };
+            document.getElementById('modalTipo').textContent = tipos[tipo] || tipo;
+            document.getElementById('modalRating').textContent = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+            document.getElementById('modalNota').textContent = nota || 'sin nota';
+
+            const imgEl = document.getElementById('modalPortada');
+            const sinPortadaEl = document.getElementById('modalSinPortada');
+            if (portada) {
+                imgEl.src = portada;
+                imgEl.style.display = 'block';
+                sinPortadaEl.style.display = 'none';
+            } else {
+                imgEl.style.display = 'none';
+                sinPortadaEl.textContent = titulo;
+                sinPortadaEl.style.display = 'flex';
+            }
+
+            document.getElementById('edicionForm').style.display = 'none';
+            document.getElementById('dropdownMenu').classList.remove('visible');
+            document.getElementById('modalOverlay').classList.add('activo');
+        }
+
+        function toggleMenu(e) {
+            e.stopPropagation();
+            document.getElementById('dropdownMenu').classList.toggle('visible');
+        }
+
+        function activarEdicion() {
+            document.getElementById('dropdownMenu').classList.remove('visible');
+            document.getElementById('edicionForm').style.display = 'flex';
+            document.getElementById('editRating').value = document.getElementById('modalRating').textContent.split('★').length - 1;
+            document.getElementById('editNota').value = document.getElementById('modalNota').textContent === 'sin nota' ? '' : document.getElementById('modalNota').textContent;
+            document.getElementById('editPortada').value = document.getElementById('modalPortada').src || '';
+        }
+
+        function cancelarEdicion() {
+            document.getElementById('edicionForm').style.display = 'none';
+        }
+
+        function guardarEdicion() {
+            const rating = document.getElementById('editRating').value;
+            const nota = document.getElementById('editNota').value;
+            const portada = document.getElementById('editPortada').value;
+            fetch('/editar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: itemIdActual, rating, nota, portada })
+            }).then(() => location.reload());
+        }
+
+        function compartirItem() {
+            document.getElementById('dropdownMenu').classList.remove('visible');
+            const url = window.location.origin + '/#item-' + itemIdActual;
+            if (navigator.share) {
+                navigator.share({
+                    title: tituloActual + ' — mi estantería',
+                    text: 'mira mi reseña de ' + tituloActual,
+                    url: url
+                });
+            } else {
+                navigator.clipboard.writeText(url);
+                alert('link copiado al portapapeles!');
+            }
+        }
+
+        function eliminarItem() {
+            document.getElementById('dropdownMenu').classList.remove('visible');
+            if (confirm('¿Segura que quieres eliminar esto?')) {
+                fetch('/eliminar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: itemIdActual })
+                }).then(() => location.reload());
+            }
+        }
+
+        function cerrarModal() {
+            document.getElementById('modalOverlay').classList.remove('activo');
+            document.getElementById('dropdownMenu').classList.remove('visible');
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') cerrarModal();
+        });
+    </script>
+
+</body>
+</html>
